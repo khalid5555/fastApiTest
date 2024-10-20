@@ -28,7 +28,7 @@ class Patient(Base):
     date = Column(String, nullable=False)  # Change to Date if you have a Date type
     mobile = Column(String, nullable=False)
     details = Column(String)
-    rays = Column(String)  # Make sure this is defined in your model
+    rays = Column(JSON)  # Make sure this is defined in your model
     createdAt = Column(DateTime, default=datetime.now)
 
 
@@ -76,13 +76,14 @@ def create_patient(
     db: Session = Depends(get_db),
 ):
     try:
-        images = [save_ray_image(ray_file) for ray_file in rays]
+        images = [save_ray_image(ray_file) for ray_file in rays] if rays else []
+        print("images======: ", images)
         db_patient = Patient(
             name=name,
             date=datetime.now().strftime("%Y-%m-%d"),
             mobile=mobile,
             details=details,
-            rays=json.dumps(images) if images else None,
+            rays=images,
             createdAt=datetime.now(),
         )
         db.add(db_patient)
