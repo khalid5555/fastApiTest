@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إضافة مريض</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<style>
+    body {
+        display: flex;
+    }
+    
+    .sidebar {
+        min-height: 100vh;
+        background-color: #f8f9fa;
+        padding: 20px;
+    }
+    
+    .content {
+        flex-grow: 1;
+        padding: 20px;
+    }
+</style>
+
+<body class="bg-light" dir="rtl">
+    <div class="sidebar">
+        <h3>لوحة التحكم</h3>
+        <ul class="list-unstyled">
+            <li><a href=" /create_patient_page" class="btn btn-primary btn-block mb-2">إضافة مريض جديد</a></li>
+            <li><a href="/" class="btn btn-secondary btn-block">عرض كل المرضى</a></li>
+        </ul>
+    </div>
+
+    <div class="container mt-5 content">
+        <h1 class="text-center mb-4">إضافة مريض جديد</h1>
+        <div class="card mb-4 text-right">
+            <div class="card-header bg-primary text-white">إضافة مريض</div>
+            <div class="card-body" dir="rtl">
+                <form action="/create_patient" method="post" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="name">اسم المريض</label>
+                        <input type="text" class="form-control" id="name" name="name" placeholder="اسم المريض" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="date">تاريخ</label>
+                        <input type="datetime-local" class="form-control" id="date" name="date" placeholder="تاريخ" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="mobile">رقم الهاتف</label>
+                        <input type="text" class="form-control" id="mobile" name="mobile" placeholder="رقم الهاتف" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="details">تفاصيل</label>
+                        <textarea class="form-control" id="details" name="details" placeholder="تفاصيل"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="rays">الأشعة</label>
+                        <input type="file" class="form-control-file" id="rays" name="rays" multiple accept="image/*" onchange="previewImages()">
+                    </div>
+                    <div class="form-group" id="preview-container">
+                        <label>معاينة الصور:</label>
+                        <div id="image-preview" class="row"></div>
+                    </div>
+
+
+
+                    <button type="submit" class="btn btn-primary">إضافة</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script>
+        function previewImages() {
+            const fileInput = document.getElementById('rays');
+            const previewContainer = document.getElementById('image-preview');
+
+            // لا تفريغ المحتوى السابق
+            const files = fileInput.files;
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const reader = new FileReader();
+
+                reader.onload = function(e) {
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.classList.add('img-fluid', 'rounded', 'col-4', 'mb-2'); // إضافة بعض الأنماط
+                    previewContainer.appendChild(img);
+                }
+
+                reader.readAsDataURL(file);
+            }
+        }
+    </script>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>
