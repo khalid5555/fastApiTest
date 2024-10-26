@@ -4,7 +4,8 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -29,22 +30,24 @@ class Patient(Base):
     # __tablename__ = "doctor"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
-    date = Column(String, nullable=False)  # Change to Date if you have a Date type
-    mobile = Column(String, nullable=False)
     details = Column(String)
-    rays = Column(JSON)  # Make sure this is defined in your model
-    createdAt = Column(DateTime, default=datetime.now)
+    rays = Column(String)  # Make sure this is defined in your model
+    date = Column(String, nullable=False)  # Change to Date if you have a Date type
+    createdAt = Column(String, default=datetime.now)
 
 
 # إنشاء الجداول في قاعدة البيانات
 Base.metadata.create_all(bind=engine)
-# يمكنك استيراد النموذج Patient والدوال اللازمة من الكود السابق
-# تأكد من وجود مجلد للأشعة
-
-
 # إعداد التطبيق
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # يمكنك تحديد النطاقات المسموح بها هنا
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.mount("/images", StaticFiles(directory="images"), name="images")
 
 # إعداد قالب Jinja2
@@ -65,11 +68,8 @@ def get_db():
 
 # لصفحة الرئيسية
 @app.get("/", response_class=HTMLResponse)
-async def read_home(
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    patients = get_patients(skip=0, limit=100, db=db)
+async def read_home(request: Request, db: Session = Depends(get_db)):
+    patients = get_patients(db=db)
     return templates.TemplateResponse(
         "index.html", {"request": request, "patients": patients}
     )
@@ -82,42 +82,42 @@ def create_patient_form(request: Request):
 
 # إضافة مريض
 @app.post("/create_patient", response_class=HTMLResponse)
-def create_patient(
+async def create_patient(
     request: Request,
     name: str = Form(...),
-    mobile: Optional[str] = Form(None, max_length=11),
-    date: Optional[datetime] = Form(default=None),
+    date: Optional[str] = Form(default=None),
     details: Optional[str] = Form(default=None),
-    rays: Optional[List[UploadFile]] = Form(default=None),
+    rays: List[UploadFile] | None = None,
     db: Session = Depends(get_db),
 ):
     try:
-        print("rays:========.. ", rays.__len__())
+        print("rays:========> ", rays)
         images = []
 
         # تحقق من وجود صور الأشعة ومعالجتها إذا كانت موجودة
-        if rays:
+        if rays is not None and len(rays) > 0:
             for ray_file in rays:
-                if ray_file:  # التحقق من أن الملف ليس فارغًا
+                if (
+                    ray_file
+                    and ray_file.filename
+                    and ray_file.filename != ""
+                    and ray_file.file
+                ):
                     # تحديد مسار حفظ الصورة
-                    file_location = os.path.join("images", ray_file.filename)
-
-                    # حفظ الملف على القرص
-                    with open(file_location, "wb") as f:
-                        f.write(ray_file.file.read())
-
-                    # إضافة مسار الصورة إلى قائمة الصور
+                    file_location = save_ray_image(ray_file)
+                    print("file_location: ", file_location)
                     images.append(file_location)
                     print("images:=======> ", images)
+
         # إنشاء كائن المريض بعد إضافة جميع الصور
         db_patient = Patient(
             name=name,
-            date=(
-                date.strftime("%Y-%m-%d")
-                if date
-                else datetime.now().strftime("%Y-%m-%d")
-            ),
-            mobile=mobile,
+            date=date,
+            # date=(
+            #     date.strftime("%Y-%m-%d")
+            #     if date
+            #     else datetime.now().strftime("%Y-%m-%d")
+            # ),
             details=details,
             rays=images,
             createdAt=datetime.now(),
@@ -129,7 +129,7 @@ def create_patient(
         db.refresh(db_patient)
 
         # جلب قائمة المرضى لعرضها في الواجهة
-        db_patient2 = get_patients(skip=0, limit=100, db=db)
+        db_patient2 = get_patients(db=db)
 
         # عرض الصفحة الرئيسية مع قائمة المرضى
         return RedirectResponse(url="/", status_code=303)
@@ -140,42 +140,6 @@ def create_patient(
     finally:
         # إغلاق الاتصال بقاعدة البيانات
         db.close()
-
-
-# تعديل دالة إضافة مريض
-@app.post("/add_patient", response_class=HTMLResponse)
-async def add_patient(
-    request: Request,
-    name: str = Form(...),
-    date: str = Form(...),
-    mobile: str = Form(...),
-    details: str = Form(None),
-    rays: List[UploadFile] = File([]),
-):
-    directory = "images"
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-    ray_filenames = []
-    for ray in rays:
-        filename = f"{directory}_{ray.filename}"
-        with open(filename, "wb") as buffer:
-            buffer.write(ray.file.read())
-        ray_filenames.append(filename)
-
-    new_patient = PatientModel(
-        id=len(patients) + 1,
-        name=name,
-        date=date,
-        mobile=mobile,
-        details=details,
-        rays=ray_filenames,
-        createdAt=datetime.now(),
-    )
-    patients.append(new_patient)
-    return templates.TemplateResponse(
-        "index.html", {"request": request, "patients": patients}
-    )
 
 
 def save_ray_image(ray_file: UploadFile) -> str:
@@ -193,9 +157,73 @@ def save_ray_image(ray_file: UploadFile) -> str:
 
 # الحصول على جميع المرضى
 @app.get("/patients/", response_model=list[PatientModel])
-def get_patients(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    patients = db.query(Patient).offset(skip).limit(limit).all()
-    return patients
+def get_patients(db: Session = Depends(get_db)):
+    try:
+        patients = db.query(Patient).offset(0).limit(1000).all()
+        for patient in patients:
+            patient.rays = patient.rays.replace("[", "").replace("]", "").split(", ")
+
+        print(vars(patients[0]))
+        return patients
+    except Exception as e:
+        raise e
+
+
+# الحصول على جميع المرضى
+@app.get("/api/get_all/", response_class=JSONResponse)
+def get_patients_api(db: Session = Depends(get_db)):
+    try:
+        patients = db.query(Patient).offset(0).limit(1000).all()
+        # معالجة البيانات قبل إرجاعها
+        for patient in patients:
+            # تحويل حقل rays إلى قائمة إذا كان مخزن كسلسلة نصية
+            if isinstance(patient.rays, str):
+                try:
+                    patient.rays = json.loads(patient.rays)
+                except json.JSONDecodeError:
+                    # إذا لم تكن JSON صحيحة، يمكن تحويلها إلى قائمة بالطريقة المناسبة
+                    patient.rays = (
+                        patient.rays.replace("[", "").replace("]", "").split(", ")
+                    )
+        patient_data = [PatientModel.from_orm(patient).dict() for patient in patients]
+        print(vars(patients[0]))
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "data": {"records": patient_data, "nums": len(patient_data)},
+            }
+        )
+        # return JSONResponse(
+        #     content={
+        #         "success": True,
+        #         "number_patients": len(patient_data),
+        #         "data": patient_data,
+        #     }
+        # )
+
+    except Exception as e:
+        raise e
+
+
+@app.get("/api/search/", response_class=JSONResponse)
+def search_patients(name: str, db: Session = Depends(get_db)):
+    try:
+        # البحث عن المرضى الذين يحتوي اسمهم على النص المحدد
+        patients = db.query(Patient).filter(Patient.name.contains(name)).all()
+
+        # تحويل قائمة كائنات المرضى إلى قائمة من القواميس باستخدام Pydantic
+        patient_data = [PatientModel.from_orm(patient).dict() for patient in patients]
+
+        # تحضير النتيجة النهائية
+        response_data = {
+            "success": True,
+            "data": {"records": patient_data, "nums": len(patient_data)},
+        }
+
+        return JSONResponse(content=response_data)
+    except Exception as e:
+        raise e
 
 
 # الحصول على مريض حسب المعرف
@@ -208,22 +236,64 @@ def read_patient(patient_id: int, db: Session = Depends(get_db)):
 
 
 # وظيفة لتحديث بيانات مريض
-@app.put("/patients/{patient_id}", response_model=PatientModel)
-def update_patient(
-    patient_id: int, updated_patient: PatientModel, db: Session = Depends(get_db)
+@app.post("/update_web/{patient_id}", response_class=HTMLResponse)
+async def update_web(
+    request: Request,
+    patient_id: int,
+    name: Optional[str] = Form(default=None),
+    date: Optional[str] = Form(default=None),
+    details: Optional[str] = Form(default=None),
+    rays: List[UploadFile] | None = None,
+    db: Session = Depends(get_db),
 ):
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
-    if patient is None:
-        raise HTTPException(status_code=404, detail="Patient not found")
+    try:
+        # جلب المريض من قاعدة البيانات باستخدام معرفه
+        db_patient = db.query(Patient).filter(Patient.id == patient_id).first()
 
-    patient.name = updated_patient.name
-    patient.details = updated_patient.details
-    patient.mobile = updated_patient.mobile
-    patient.rays = updated_patient.rays
-    patient.date = updated_patient.date
-    db.commit()
-    db.refresh(patient)
-    return patient
+        # إذا لم يتم العثور على المريض، يتم رفع استثناء
+        if not db_patient:
+            raise HTTPException(status_code=404, detail="Patient not found")
+
+        # تحديث الحقول المعدلة فقط
+        if name is not None:
+            db_patient.name = name
+        if date is not None:
+            db_patient.date = date
+        if details is not None:
+            db_patient.details = details
+
+        # معالجة صور الأشعة الجديدة إذا تم رفعها
+        if rays is not None and len(rays) > 0:
+            new_images = []
+            for ray_file in rays:
+                if (
+                    ray_file
+                    and ray_file.filename
+                    and ray_file.filename != ""
+                    and ray_file.file
+                ):
+                    file_location = save_ray_image(ray_file)
+                    new_images.append(file_location)
+
+            # تحديث قائمة الصور إذا تم إضافة صور جديدة
+            if new_images:
+                db_patient.rays = new_images
+
+        # حفظ التعديلات في قاعدة البيانات
+        db.commit()
+        db.refresh(db_patient)
+
+        # إعادة توجيه المستخدم إلى الصفحة الرئيسية بعد التعديل
+        return RedirectResponse(url="/", status_code=303)
+
+    except Exception as e:
+        # في حالة حدوث خطأ، يتم إرجاع العمليات
+        db.rollback()
+        raise e
+
+    finally:
+        # إغلاق الاتصال بقاعدة البيانات
+        db.close()
 
 
 # وظيفة لحذف مريض
@@ -239,92 +309,9 @@ async def delete_patient(
 
         if patient is None:
             raise HTTPException(status_code=404, detail="Patient not found")
-
         db.delete(patient)
         db.commit()
-
         # الحصول على جميع المرضى
         patients = get_patients(skip=0, limit=100, db=db)
         print("delete patient======: ", patients.__len__())
         return RedirectResponse(url="/", status_code=303)
-
-
-""" 
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
-    # تحديد المسار الذي تريد حفظ الصورة فيه
-    directory = "images"
-
-    # التأكد من وجود المجلد
-    if not os.path.exists(directory):
-        os.makedirs(directory)  # إنشاء المجلد إذا لم يكن موجودًا
-
-    file_location = f"{directory}/{file.filename}"
-
-    # حفظ الملف
-    with open(file_location, "wb") as file_object:
-        file_object.write(file.file.read())
-
-    return {"info": f"file '{file.filename}' saved at '{file_location}'"}
- """
-
-# # إنشاء دالة لإضافة مريض جديد
-# def create_new_patient(PatientModel: dict, db: Session, rays_files: List[UploadFile]):
-#     new_patient = Patient(
-#         name=PatientModel["name"],
-#         mobile=PatientModel["mobile"],
-#         date=datetime.now(),
-#         details=PatientModel["details"],
-#         rays=[save_ray_image(ray_file) for ray_file in rays_files],
-#         createdAt=datetime.now(),
-#     )
-#     db.add(new_patient)
-#     db.commit()
-#     db.refresh(new_patient)
-#     return new_patient
-""" @app.post("/patients/")
-# نموذج الدالة
-async def create_patient(
-    patient: PatientModel,
-    fileRays: List[UploadFile] = File(default=None),
-    db: Session = Depends(get_db),
-):
-    # تحديد المسار الذي تريد حفظ الصور فيه
-    directory = "images"
-
-    # التأكد من وجود المجلد
-    if not os.path.exists(directory):
-        os.makedirs(directory)  # إنشاء المجلد إذا لم يكن موجودًا
-
-    rays = []
-
-    if fileRays:
-        for file in fileRays:
-            file_location = f"{directory}/{file.filename}"
-
-            # حفظ الملف
-            with open(file_location, "wb") as file_object:
-                file_object.write(file.file.read())
-
-            # إضافة مسار الصورة إلى قائمة الأشعة
-            rays.append(file_location)
-
-    # إنشاء كائن مريض جديد
-    db_patient = PatientModel(
-        name=patient.name,
-        mobile=patient.mobile,
-        details=patient.details,
-        rays=rays,
-        createdAt=datetime.now(),
-    )
-
-    # حفظ المريض في قاعدة البيانات
-    db.add(db_patient)
-    db.commit()
-    db.refresh(db_patient)
-
-    return {
-        "message": "Patient created successfully",
-        "data": db_patient,
-    }
- """
