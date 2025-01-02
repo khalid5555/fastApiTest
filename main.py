@@ -1,4 +1,3 @@
-from ast import Str
 import json
 import os
 from datetime import datetime
@@ -12,20 +11,22 @@ from fastapi.templating import Jinja2Templates
 
 # تعريف مخطط المريض باستخدام Pydantic
 from pydantic import BaseModel, Field
-from sqlalchemy import JSON, Column, DateTime, Integer, String, create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import create_engine
+
+from sqlalchemy import JSON, Column, DateTime, Integer, String
+# from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import Session, sessionmaker,declarative_base
 
 from patient_model import PatientModel
 
+Base = declarative_base()
 # إعداد قاعدة البيانات
 DATABASE_URL = "sqlite:///./doctor.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 
 
-# تعريف نموذج المريض
+#  # تعريف نموذج المريض
 class Patient(Base):
     # __tablename__ = "patients"
     __tablename__ = "doctor"
@@ -34,11 +35,10 @@ class Patient(Base):
     details = Column(String)
     rays = Column(String)  # Make sure this is defined in your model
     date = Column(String, nullable=False)  # Change to Date if you have a Date type
-    createAt = Column(String, default=datetime.now)
+    createAt = Column(String, default=datetime.now) 
 
 
-# إنشاء الجداول في قاعدة البيانات
-Base.metadata.create_all(bind=engine)
+
 # إعداد التطبيق
 app = FastAPI()
 
@@ -57,7 +57,9 @@ templates = Jinja2Templates(directory="templates")
 # قائمة لتمثيل المرضى
 patients: List[PatientModel] = []
 
-
+# إنشاء الجداول في قاعدة البيانات
+def init_db():
+    Base.metadata.create_all(bind=engine)
 # إعداد التبعية لجلسة قاعدة البيانات
 def get_db():
     db = SessionLocal()
@@ -229,26 +231,26 @@ def search_patients(name: str, db: Session = Depends(get_db)):
         raise e
 
 
-@app.get("/", response_class=JSONResponse)
-def search_patients(name: str, db: Session = Depends(get_db)):
-    try:
-        # البحث عن المرضى الذين يحتوي اسمهم على النص المحدد
-        patients = db.query(Patient).filter(Patient.name.contains(name)).all()
+# @app.get("/search", response_class=JSONResponse)
+# def search_patients(name: str, db: Session = Depends(get_db)):
+#     try:
+#         # البحث عن المرضى الذين يحتوي اسمهم على النص المحدد
+#         patients = db.query(Patient).filter(Patient.name.contains(name)).all()
 
-        # تحويل قائمة كائنات المرضى إلى قائمة من القواميس باستخدام Pydantic
-        # patient_data = [PatientModel.model_validate(patient).model_dump() for patient in patients]
-        # patients = get_patients(db=db)
+#         # تحويل قائمة كائنات المرضى إلى قائمة من القواميس باستخدام Pydantic
+#         # patient_data = [PatientModel.model_validate(patient).model_dump() for patient in patients]
+#         # patients = get_patients(db=db)
 
-        # تحضير النتيجة النهائية
-        response_data = {
-            "success": True,
-            "data":  patients,
-            "nums": len(patients)
-        }
+#         # تحضير النتيجة النهائية
+#         response_data = {
+#             "success": True,
+#             "data":  patients,
+#             "nums": len(patients)
+#         }
 
-        return JSONResponse(content=response_data)
-    except Exception as e:
-        raise e
+#         return JSONResponse(content=response_data)
+#     except Exception as e:
+#         raise e
 
 
 # الحصول على مريض حسب المعرف
