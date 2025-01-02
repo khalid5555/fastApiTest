@@ -11,8 +11,7 @@ class PatientModel(BaseModel):
     details: Optional[str] = None
     # rays: Optional[List[str]] = []  # يمكنك أن تجعل هذا اختياريًا
     rays: List[str] = Field(default_factory=list)  # حقل الأشعة افتراضيًا قائمة فارغة
-    createdAt: Optional[str] = None  # الوقت الذي تم فيه إنشاء السجل
+    createAt: Optional[str] = None  # الوقت الذي تم فيه إنشاء السجل
 
     class Config:
-        orm_mode = True
         from_attributes = True

@@ -1,3 +1,4 @@
+from ast import Str
 import json
 import os
 from datetime import datetime
@@ -26,14 +27,14 @@ Base = declarative_base()
 
 # تعريف نموذج المريض
 class Patient(Base):
-    __tablename__ = "patients"
-    # __tablename__ = "doctor"
+    # __tablename__ = "patients"
+    __tablename__ = "doctor"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     details = Column(String)
     rays = Column(String)  # Make sure this is defined in your model
     date = Column(String, nullable=False)  # Change to Date if you have a Date type
-    createdAt = Column(String, default=datetime.now)
+    createAt = Column(String, default=datetime.now)
 
 
 # إنشاء الجداول في قاعدة البيانات
@@ -85,7 +86,7 @@ def create_patient_form(request: Request):
 async def create_patient(
     request: Request,
     name: str = Form(...),
-    date: Optional[str] = Form(default=None),
+    date: Optional[datetime] = Form(default=None),
     details: Optional[str] = Form(default=None),
     rays: List[UploadFile] | None = None,
     db: Session = Depends(get_db),
@@ -112,15 +113,16 @@ async def create_patient(
         # إنشاء كائن المريض بعد إضافة جميع الصور
         db_patient = Patient(
             name=name,
-            date=date,
-            # date=(
-            #     date.strftime("%Y-%m-%d")
-            #     if date
-            #     else datetime.now().strftime("%Y-%m-%d")
-            # ),
+            # date=date,
+            date=(
+                date.strftime("%Y-%m-%d")
+                if date
+                else datetime.now().strftime("%Y-%m-%d")
+            ),
             details=details,
-            rays=images,
-            createdAt=datetime.now(),
+            # rays  =images ,
+             rays=json.dumps(images) if images else None,
+            createAt=datetime.now().__str__(),
         )
 
         # حفظ المريض في قاعدة البيانات
@@ -129,7 +131,7 @@ async def create_patient(
         db.refresh(db_patient)
 
         # جلب قائمة المرضى لعرضها في الواجهة
-        db_patient2 = get_patients(db=db)
+        get_patients(db=db)
 
         # عرض الصفحة الرئيسية مع قائمة المرضى
         return RedirectResponse(url="/", status_code=303)
@@ -163,7 +165,7 @@ def get_patients(db: Session = Depends(get_db)):
         for patient in patients:
             patient.rays = patient.rays.replace("[", "").replace("]", "").split(", ")
 
-        print(vars(patients[0]))
+        # print(vars(patients[0]))
         return patients
     except Exception as e:
         raise e
@@ -174,6 +176,7 @@ def get_patients(db: Session = Depends(get_db)):
 def get_patients_api(db: Session = Depends(get_db)):
     try:
         patients = db.query(Patient).offset(0).limit(1000).all()
+        print("patients: ", patients)
         # معالجة البيانات قبل إرجاعها
         for patient in patients:
             # تحويل حقل rays إلى قائمة إذا كان مخزن كسلسلة نصية
@@ -185,7 +188,7 @@ def get_patients_api(db: Session = Depends(get_db)):
                     patient.rays = (
                         patient.rays.replace("[", "").replace("]", "").split(", ")
                     )
-        patient_data = [PatientModel.from_orm(patient).dict() for patient in patients]
+        patient_data = [PatientModel.from_orm(patient).model_dump() for patient in patients]
         print(vars(patients[0]))
 
         return JSONResponse(
@@ -213,12 +216,34 @@ def search_patients(name: str, db: Session = Depends(get_db)):
         patients = db.query(Patient).filter(Patient.name.contains(name)).all()
 
         # تحويل قائمة كائنات المرضى إلى قائمة من القواميس باستخدام Pydantic
-        patient_data = [PatientModel.from_orm(patient).dict() for patient in patients]
+        patient_data = [PatientModel.model_validate(patient).model_dump() for patient in patients]
 
         # تحضير النتيجة النهائية
         response_data = {
             "success": True,
             "data": {"records": patient_data, "nums": len(patient_data)},
+        }
+
+        return JSONResponse(content=response_data)
+    except Exception as e:
+        raise e
+
+
+@app.get("/", response_class=JSONResponse)
+def search_patients(name: str, db: Session = Depends(get_db)):
+    try:
+        # البحث عن المرضى الذين يحتوي اسمهم على النص المحدد
+        patients = db.query(Patient).filter(Patient.name.contains(name)).all()
+
+        # تحويل قائمة كائنات المرضى إلى قائمة من القواميس باستخدام Pydantic
+        # patient_data = [PatientModel.model_validate(patient).model_dump() for patient in patients]
+        # patients = get_patients(db=db)
+
+        # تحضير النتيجة النهائية
+        response_data = {
+            "success": True,
+            "data":  patients,
+            "nums": len(patients)
         }
 
         return JSONResponse(content=response_data)
@@ -312,6 +337,6 @@ async def delete_patient(
         db.delete(patient)
         db.commit()
         # الحصول على جميع المرضى
-        patients = get_patients(skip=0, limit=100, db=db)
-        print("delete patient======: ", patients.__len__())
+        patients  = db.query(Patient).all()
+        print("delete patient======>: ",  len(patients))
         return RedirectResponse(url="/", status_code=303)

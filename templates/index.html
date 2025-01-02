@@ -36,6 +36,11 @@
         <ul class="list-unstyled">
             <li><a href="/create_patient_page" class="btn btn-primary btn-block mb-2">إضافة مريض جديد</a></li>
             <li><a href="/" class="btn btn-secondary btn-block"> كل المرضى القديمة</a></li>
+            <li><input type="search" name="search" placeholder="اسم المريض" class="form-control" id="search-input"></li>
+            <li>
+                <button type="button" class="btn btn-secondary btn-block" id="search-button">بحث</button>
+            </li>
+
         </ul>
     </div>
 
@@ -79,32 +84,7 @@
                             <!-- <button class="btn btn-secondary btn-sm" data-toggle="collapse" data-target="#editForm{{ patient.id }}">تعديل</button> -->
                         </div>
 
-                        <!--                         <div id="editForm{{ patient.id }}" class="collapse mt-3">
-                            <form action="/update_web/{{ patient.id }}" method="post" enctype="multipart/form-data">
-                                <div class="form-group">
-                                    <label for="name">اسم المريض</label>
-                                    <input type="text" class="form-control" name="name" value="{{ patient.name }}" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="date">تاريخ</label>
-                                    <input type="text" class="form-control" name="date" value="{{ patient.date }}" required>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="details">تفاصيل</label>
-                                    <textarea class="form-control" name="details">{{ patient.details }}</textarea>
-                                </div>
-                                <div class="form-group">
-                                    <label for="rays">الأشعة الجديدة</label>
-                                    <input type="file" class="form-control-file" id="rays" name="rays" multiple accept="image/*" onchange="previewImages()">
-                                </div>
-                                <div class="form-group" id="preview-container">
-                                    <label>معاينة الصور:</label>
-                                    <div id="image-preview" class="row"></div>
-                                </div>
-                                <button type="submit" class="btn btn-primary">تعديل</button>
-                            </form>
-                        </div> -->
+                       
                     </div>
                 </div>
             </div>
@@ -134,7 +114,19 @@
             }
         }
     </script>
-
+<script>
+    document.getElementById('search-button').addEventListener('click', async () => {
+        const searchQuery = document.getElementById('search-input').value;
+        try {
+            const response = await fetch(`/search?name=${encodeURIComponent(searchQuery)}`);
+            const data = await response.json();
+            console.log(data);
+            // يمكنك هنا تحديث واجهة المستخدم لعرض النتائج
+        } catch (error) {
+            console.error('خطأ في البحث:', error);
+        }
+    });
+</script>
     <!-- إضافة Bootstrap JS وjQuery -->
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
